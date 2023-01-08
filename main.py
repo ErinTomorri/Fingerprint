@@ -1,82 +1,50 @@
 import cv2
-import numpy as np
-from skimage.morphology import skeletonize, thin
+import os
+import sys
+import numpy
+import matplotlib.pyplot as plt
 
-def remove_dot(invert_thin):
-    temp = np.array(invert_thin, dtype=np.uint8)
-    temp = temp / 255
-    enhanced_img = np.array(temp)
-    filter_ = np.zeros((10, 10))
-    h, w = temp.shape[:2]
-    filter_size = 6
+sample = cv2.imread("SOCOFing/Altered/Altered-Hard/104__M_Left_index_finger_Zcut.BMP")
 
-    for i in range(h - filter_size):
-        for j in range(w - filter_size):
-            filter_ = temp[i:i + filter_size, j:j + filter_size]
-            if sum(filter_[:, 0]) == 0 and sum(filter_[:, filter_size - 1]) == 0 and sum(filter_[0, :]) == 0 and sum(filter_[filtersize - 1, :]) == 0:
-                temp[i:i + filter_size, j:j + filter_size] = np.zeros((filter_size, filter_size))
+best_score = 0
+filename = None
+image = None
+kp1, kp2, mp = None, None, None
+counter  = 0
 
-    return temp
+for file in [file for file in os.listdir("SOCOFing/Real")][:1000]:
+  counter+=1
+  fingerprint_image = cv2.imread("SOCOFing/Real/"+ file)
+  sift = cv2.SIFT_create()
+  
+  keypoints_1, descriptors_1 = sift.detectAndCompute(sample, None)
+  keypoints_2, descriptors_2 =  sift.detectAndCompute(fingerprint_image, None)
 
-def get_descriptors(img):
-    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
-    img = clahe.apply(img)
-    img = np.array(img, dtype=np.uint8)
-    ret, img = cv2.threshold(img, 127, 255, cv2.THRESH_BINARY_INV | cv2.THRESH_OTSU)
-    img[img == 255] = 1
-    skeleton = skeletonize(img)
-    skeleton = np.array(skeleton, dtype=np.uint8)
-    skeleton = remove_dot(skeleton)
-    harris_corners = cv2.cornerHarris(img, 3, 3, 0.04)
-    harris_normalized = cv2.normalize(harris_corners, 0, 255, norm_type=cv2.NORM_MINMAX, dtype=cv2.CV_32FC1)
-    threshold_harris = 125
-    keypoints = []
-    for x in range(harris_normalized.shape[0]):
-        for y in range(harris_normalized.shape[1]):
-            if harris_normalized[x][y] > threshold_harris:
-                keypoints.append(cv2.KeyPoint(y, x, 1))
-    orb = cv2.ORB_create()
-    _, des = orb.compute(img, keypoints)
-    return keypoints, des
+  matches = cv2.FlannBasedMatcher({'algorithm': 1, 'trees': 10}, {}).knnMatch(descriptors_1, descriptors_2, k=2)
 
-def main():
-	image_name = sys.argv[1]
-	img1 = cv2.imread("database/" + image_name, cv2.IMREAD_GRAYSCALE)
-	kp1, des1 = get_descriptors(img1)
+  match_points = []
 
-	image_name = sys.argv[2]
-	img2 = cv2.imread("database/" + image_name, cv2.IMREAD_GRAYSCALE)
-	kp2, des2 = get_descriptors(img2)
+  for p, q in matches: 
+    if p.distance < 0.1 * q.distance:
+      match_points.append(p)
 
-	# Matching between descriptors
-	bf = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck=True)
-	matches = sorted(bf.match(des1, des2), key= lambda match:match.distance)
-	# Plot keypoints
-	img4 = cv2.drawKeypoints(img1, kp1, outImage=None)
-	img5 = cv2.drawKeypoints(img2, kp2, outImage=None)
-	f, axarr = plt.subplots(1,2)
-	axarr[0].imshow(img4)
-	axarr[1].imshow(img5)
-	plt.show()
-	# Plot matches
-	img3 = cv2.drawMatches(img1, kp1, img2, kp2, matches, flags=2, outImg=None)
-	plt.imshow(img3)
-	plt.show()
+  keypoints = 0
 
-	# Calculate score
-	score = 0
-	for match in matches:
-		score += match.distance
-	score_threshold = 33
-	if score/len(matches) < score_threshold:
-		print("Fingerprint matches.")
-	else:
-		print("Fingerprint does not match.")
+  if len(keypoints_1) < len(keypoints_2):
+    keypoints = len(keypoints_1)
+  else:
+    keypoints = len(keypoints_2)
 
+  if len(match_points) / keypoints * 100 > best_score:
+    best_score = len(match_points) / keypoints * 100
+    filename = file
+    image = fingerprint_image
+    kp1, kp2, mp = keypoints_1, keypoints_2, match_points
 
-
-if __name__ == "__main__":
-	try:
-		main()
-	except:
-		raise
+print("BEST MATCH: " + filename)
+print ("SCORE:" + str(best_score))
+result = cv2.drawMatches(sample, kp1, image, kp2, mp, None)
+result = cv2.resize(result, None, fx=4, fy=4)
+cv2.imshow("Resut", result)
+cv2.waitKey(0)
+cv2.destroyAllWindows()
