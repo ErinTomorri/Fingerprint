@@ -1,8 +1,8 @@
 import cv2
 import os
-import sys
-import numpy
-import matplotlib.pyplot as plt
+#import sys
+#import numpy
+#import matplotlib.pyplot as plt
 
 sample = cv2.imread("SOCOFing/Altered/Altered-Hard/104__M_Left_index_finger_Zcut.BMP")
 
